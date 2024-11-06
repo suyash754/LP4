@@ -1,0 +1,65 @@
+5_CBOW
+
+!pip install torch torchvision torchaudio
+
+import re
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+import nltk
+nltk.download('punkt')
+nltk.download('stopwords')
+
+text = input("Enter a sentence for CBOW implementation: ")
+def preprocess_text(text):
+    text = re.sub(r'\W', ' ', text.lower())
+    tokens = word_tokenize(text)
+    tokens = [word for word in tokens if word not in stopwords.words('english')]
+    return tokens
+tokens = preprocess_text(text)
+vocab = set(tokens)
+word_to_idx = {word: i for i, word in enumerate(vocab)}
+idx_to_word = {i: word for i, word in enumerate(vocab)}
+
+def generate_training_data(tokens, window_size):
+  data = []
+  for i, word in enumerate(tokens):
+    context = [tokens[j] for j in range(max(0, i - window_size), min(len(tokens), i + window_size + 1)) if j != i]
+    data.append(([word_to_idx[w] for w in context], word_to_idx[word]))
+  return data
+training_data = generate_training_data(tokens, window_size=2)
+
+class CBOW(nn.Module):
+  def __init__(self, vocab_size, embedding_dim):
+    super(CBOW, self).__init__()
+    self.embeddings = nn.Embedding(vocab_size, embedding_dim)
+    self.linear = nn.Linear(embedding_dim, vocab_size)
+  def forward(self, context):
+    embedded = self.embeddings(context)
+    return self.linear(torch.mean(embedded, dim=0).view(1, -1))
+
+embedding_dim = 10
+model = CBOW(len(vocab), embedding_dim)
+optimizer = optim.SGD(model.parameters(), lr=0.01)
+loss_function = nn.CrossEntropyLoss()
+
+for epoch in range(100):
+  for context, target in training_data:
+    context_var = torch.tensor(context, dtype=torch.long)
+    target_var = torch.tensor([target], dtype=torch.long)
+    optimizer.zero_grad()
+    output = model(context_var)
+    loss = loss_function(output, target_var)
+    loss.backward()
+    optimizer.step()
+    
+def predict(context_words):
+  context_var = torch.tensor([word_to_idx[w] for w in context_words], dtype=torch.long)
+  output = model(context_var)
+  _,predicted_idx = torch.max(output, dim=1)
+  return idx_to_word[predicted_idx.item()]
+context_input = input("Enter context words (space-separated): ").split()
+predicted_word = predict(context_input)
+print(f"Predicted word: {predicted_word}")    
